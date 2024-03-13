@@ -1,0 +1,5 @@
+{
+  "openai-key": "",
+  "openai-generative-model": "gpt-3.5-turbo",
+  "display-original-question": true
+}
