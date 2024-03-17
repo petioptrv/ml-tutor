@@ -3,7 +3,7 @@ import json
 from aqt import gui_hooks, mw
 from aqt.utils import showCritical
 
-from .cards_decorators import CardsDecoratorFactory
+from .notes_wrappers import NotesWrapperFactory
 from .constants import TUTOR_NAME
 from .ml_tutor import MLTutor
 from .ml.ml_provider import MLProvider
@@ -15,20 +15,26 @@ class AnkiAddon:
     # todo: extract the ml-provider creation in a factory method?
 
     def __init__(self):
-        cards_decorator_factory = CardsDecoratorFactory()
+        notes_decorator_factory = NotesWrapperFactory()
         config = mw.addonManager.getConfig(__name__)
         ml_provider = self._initialize_ml_provider(config=config)
         self._ml_tutor = MLTutor(
-            cards_decorator_factory=cards_decorator_factory,
+            notes_decorator_factory=notes_decorator_factory,
             ml_provider=ml_provider,
             display_original_question=config["display-original-question"],
         )
         self._add_hooks()
 
     def _add_hooks(self):
+        gui_hooks.addon_config_editor_will_update_json.append(self._on_config_update)
         gui_hooks.collection_did_load.append(self._ml_tutor.on_collection_load)
         gui_hooks.card_will_show.append(self._ml_tutor.on_card_will_show)
-        gui_hooks.addon_config_editor_will_update_json.append(self._on_config_update)
+        gui_hooks.reviewer_did_show_answer.append(self._ml_tutor.on_reviewer_did_show_answer)
+        gui_hooks.editor_did_init.append(self._ml_tutor.on_editor_did_init)
+        gui_hooks.sync_will_start.append(self._ml_tutor.on_sync_will_start)
+        gui_hooks.sync_did_finish.append(self._ml_tutor.on_sync_did_finish)
+
+        gui_hooks.profile_will_close.append(self._ml_tutor.on_profile_will_close)
 
     def _on_config_update(self, text: str, addon: str) -> str:
         config = json.loads(text)
