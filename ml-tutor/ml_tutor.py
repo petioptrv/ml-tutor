@@ -35,6 +35,7 @@ from anki.notes_pb2 import Note
 from anki.scheduler.v3 import QueuedCards
 from aqt import mw
 from qt.aqt.operations import QueryOp
+from qt.aqt.progress import ProgressManager
 
 from .constants import REPHRASE_CARDS_AHEAD, TUTOR_NAME
 from .notes_wrappers import NotesWrapperFactory
@@ -70,12 +71,10 @@ class MLTutor:
             note=note, display_original_question=self._display_original_question
         )
         if not decorated_note.rephrased:
-            op = QueryOp(
-                parent=mw,
-                op=lambda _: decorated_note.rephrase_note(ml_provider=self._ml_provider),
-                success=lambda _: _,
-            )
-            op.with_progress(label=f"[{TUTOR_NAME}] Rephrasing note.").run_in_background()
+            if decorated_note.is_rephrasing:
+                decorated_note.wait_rephrasing()
+            else:
+                decorated_note.rephrase_note(ml_provider=self._ml_provider)
 
         text = decorated_note.rephrase_text(text=text, kind=kind)
         return text

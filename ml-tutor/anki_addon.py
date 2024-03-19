@@ -98,14 +98,18 @@ class AnkiAddon:
             openai_generative_model = config["openai-generative-model"]
             openai = OpenAI(api_key=openai_api_key, generative_model=openai_generative_model)
 
-            if openai.check_api_key() is False:
-                showCritical(f"[{TUTOR_NAME}] OpenAI API key is invalid.")
+            if openai.check_connected_to_web() is False:
+                showCritical(f"[{TUTOR_NAME}] OpenAI API server is not reachable.", help=None)
+                openai = None
+            elif openai.check_api_key() is False:
+                showCritical(f"[{TUTOR_NAME}] OpenAI API key is invalid.", help=None)
                 openai = None
             elif openai.check_model() is False:
                 valid_models = openai.get_valid_models()
                 showCritical(
                     f"[{TUTOR_NAME}] OpenAI model is invalid."
-                    f"<br><br><b>Valid Models</b><br>{'<br>'.join([m.id for m in valid_models])}"
+                    f"<br><br><b>Valid Models</b><br>{'<br>'.join([m.id for m in valid_models])}",
+                    help=None,
                 )
                 openai = None
 

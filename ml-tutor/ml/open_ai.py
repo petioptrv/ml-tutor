@@ -44,6 +44,19 @@ class OpenAI(MLProvider):
         self._api_key = api_key
         self._generative_model = generative_model
 
+    def check_connected_to_web(self) -> bool:
+        success = False
+        try:
+            url = f"{self._base_url}/models"
+            headers = self._build_auth_headers()
+            requests.get(url=url, headers=headers)
+            success = True
+        except requests.exceptions.ConnectionError:
+            pass  #
+        except Exception:
+            logging.exception("OpenAI API server check failed.")
+        return success
+
     def check_api_key(self) -> bool:
         success = False
         try:

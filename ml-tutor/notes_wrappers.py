@@ -121,6 +121,10 @@ class NoteWrapperBase(ABC, metaclass=DecoratorRegistryMeta):
     def id(self) -> Union[int, None]:
         return self.get_note().id
 
+    @property
+    def is_rephrasing(self) -> bool:
+        return self._is_rephrasing is not None and not self._is_rephrasing.is_set()
+
     def get_note(self) -> Note:
         return mw.col.get_note(id=self._note_id)
 
@@ -137,7 +141,7 @@ class NoteWrapperBase(ABC, metaclass=DecoratorRegistryMeta):
         return 0
 
     def wait_rephrasing(self):
-        self._is_rephrasing and self._is_rephrasing.wait()
+        self._is_rephrasing is not None and self._is_rephrasing.wait()
 
 
 class PassThroughNoteWrapper(NoteWrapperBase):
