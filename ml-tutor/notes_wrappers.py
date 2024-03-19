@@ -1,23 +1,22 @@
 import inspect
 import re
 from abc import ABC, abstractmethod, ABCMeta
+from collections import defaultdict
+from copy import copy
 from threading import Event
-from typing import Union, Optional, Dict
+from typing import Union, Optional, Dict, List, Tuple
 
 from anki.notes_pb2 import Note
 from aqt import mw
-from aqt.operations import QueryOp
-from bs4 import BeautifulSoup
+from bs4 import BeautifulSoup, Tag
 
-from .persistent_structures import PersistentDict
-from .utils import Singleton
+from .utils import Singleton, remove_tags, strip_spaces_before_punctuation, build_html_paragraph_from_text
 from .constants import (
     LLM_NORMAL_NOTE_REPHRASING_FRONT_PROMPT,
     TUTOR_NAME,
     NOTE_TEXT_PARSER,
     LLM_NORMAL_NOTE_REPHRASING_BACK_PROMPT,
     LLM_CLOZE_NOTE_REPHRASING_PROMPT,
-    CLOZE_DATA_FILE_NAME,
 )
 from .ml.ml_provider import MLProvider
 
@@ -63,10 +62,10 @@ class DecoratorRegistryMeta(ABCMeta, DecoratorRegistry):
     pass
 
 
-class NoteWrapperBase(ABC, metaclass=DecoratorRegistryMeta):  # todo: rename decorator to something else
+class NoteWrapperBase(ABC, metaclass=DecoratorRegistryMeta):
     @property
     @abstractmethod
-    def rephrased(self) -> bool:  # todo: rename "augmented" to "rephrased"
+    def rephrased(self) -> bool:
         ...
 
     @staticmethod
@@ -82,16 +81,10 @@ class NoteWrapperBase(ABC, metaclass=DecoratorRegistryMeta):  # todo: rename dec
     def _do_rephrase_note(self, ml_provider: MLProvider):
         ...
 
-    @abstractmethod
-    def _do_restore_note(self):
-        """Notes should be able to be restored even after Anki restart."""
-        ...
-
     def __init__(self, note: Note, display_original_question: bool):
         self._note_id = note.id
         self._display_original_question = display_original_question
         self._is_rephrasing: Optional[Event] = None
-        self._is_restoring: Optional[Event] = None
 
     @property
     def id(self) -> Union[int, None]:
@@ -103,47 +96,17 @@ class NoteWrapperBase(ABC, metaclass=DecoratorRegistryMeta):  # todo: rename dec
     def set_display_original_question(self, display_original_question: bool):
         self._display_original_question = display_original_question
 
-    def rephrase_note(self, ml_provider: MLProvider):
-        self.wait_restoration()
+    def rephrase_note(self, ml_provider: MLProvider) -> int:
         self.wait_rephrasing()
         self._is_rephrasing = Event()
-        op = QueryOp(
-            parent=mw,
-            op=lambda _: self._do_rephrase(ml_provider=ml_provider),
-            success=lambda _: _,
-        )
-        op.run_in_background()
-
-    def restore_note(self):
-        self.wait_rephrasing()
-        self.wait_restoration()
-        self._is_restoring = Event()
-        op = QueryOp(
-            parent=mw,
-            op=lambda _: self._do_restore(),
-            success=lambda _: _,
-        )
-        op.run_in_background()
-
-    def wait_rephrasing(self):
-        self._is_rephrasing and self._is_rephrasing.wait()
-
-    def wait_restoration(self):
-        self._is_restoring and self._is_restoring.wait()
-
-    def _do_rephrase(self, ml_provider: MLProvider) -> int:
         self._do_rephrase_note(ml_provider=ml_provider)
         is_augmenting = self._is_rephrasing
         self._is_rephrasing = None
         is_augmenting.set()
         return 0
 
-    def _do_restore(self) -> int:
-        self._do_restore_note()
-        is_restoring = self._is_restoring
-        self._is_restoring = None
-        is_restoring.set()
-        return 0
+    def wait_rephrasing(self):
+        self._is_rephrasing and self._is_rephrasing.wait()
 
 
 class PassThroughNoteWrapper(NoteWrapperBase):
@@ -161,9 +124,6 @@ class PassThroughNoteWrapper(NoteWrapperBase):
     def _do_rephrase_note(self, ml_provider: MLProvider):
         pass
 
-    def _do_restore_note(self):
-        pass
-
 
 class BasicNoteWrapperBase(NoteWrapperBase, ABC):
     @abstractmethod
@@ -175,69 +135,130 @@ class BasicNoteWrapperBase(NoteWrapperBase, ABC):
         ...
 
     @abstractmethod
-    def _get_original_question_from_augmented_note_text(self, text: str) -> str:
+    def _get_original_question_from_rephrased_note_text(self, text: str) -> str:
         ...
 
     def rephrase_text(self, text: str, kind: str) -> str:
-        augmented_text = self._rephrase_note_text_question(text=text)
+        rephrased_text, original_question_soup = self._rephrase_note_text_question(text=text)
         if kind == "reviewAnswer" and self._display_original_question:
-            augmented_text = self._rephrase_note_text_answer(text=augmented_text)
-        return augmented_text
+            rephrased_text = self._append_note_text_answer(
+                original_text=text, rephrased_question_text=rephrased_text
+            )
+            if self._display_original_question:
+                rephrased_text = self._append_original_question(
+                    rephrased_text=rephrased_text, original_question_soup=original_question_soup
+                )
+        return rephrased_text
 
-    def _rephrase_note_text_question(self, text: str) -> str:
+    def _rephrase_note_text_question(self, text: str) -> Tuple[str, BeautifulSoup]:
+        rephrased_question_soup = BeautifulSoup(features=NOTE_TEXT_PARSER)
+        self._maybe_add_style_tag_to_rephrased_question_soup(
+            rephrased_question_soup=rephrased_question_soup, text=text
+        )
+        original_question, original_question_soup = self._get_question_from_original_text(text=text)
+        rephrased_question = self._get_rephrased_question_from_original_question(
+            question=original_question
+        )
+        rephrased_question_paragraph = build_html_paragraph_from_text(
+            soup=rephrased_question_soup, text=rephrased_question
+        )
+        html_tag = rephrased_question_soup.find(name="html")
+        html_tag.append(rephrased_question_paragraph)
+        return str(rephrased_question_soup), original_question_soup
+
+    @staticmethod
+    def _maybe_add_style_tag_to_rephrased_question_soup(
+        rephrased_question_soup: BeautifulSoup, text: str
+    ):
         soup = BeautifulSoup(markup=text, features=NOTE_TEXT_PARSER)
-        first_span = soup.find("span")
-        if first_span is not None:
-            question = first_span.string
-            rephrased_question = self._get_rephrased_question_from_original_question(question=question)
-            first_span.string = rephrased_question
-            text = str(soup)
+        html_tag = rephrased_question_soup.new_tag(name="html")
+        rephrased_question_soup.append(html_tag)
+        style = soup.find("style")
+        if style is not None:
+            head_tag = rephrased_question_soup.new_tag(name="head")
+            head_tag.append(copy(style))
+            html_tag.append(head_tag)
+
+    def _get_question_from_original_text(self, text: str) -> Tuple[str, BeautifulSoup]:
+        soup = BeautifulSoup(markup=text, features=NOTE_TEXT_PARSER)
+        question_soup = BeautifulSoup(features=NOTE_TEXT_PARSER)
+        body = soup.find("body")
+        body_page_elements = body.contents
+        for element in body_page_elements:
+            if isinstance(element, Tag) and element.name == "hr":
+                break
+            else:
+                question_soup.append(copy(element))
+        if len(question_soup) != 0:
+            question = remove_tags(html=str(question_soup))
         else:
             question = self._get_original_question_from_original_note_text(text=text)
-            rephrased_question = self._get_rephrased_question_from_original_question(
-                question=question
-            )
-            text = text.replace(question, rephrased_question, 1)
-        return text
+            question_soup = BeautifulSoup(markup=question, features=NOTE_TEXT_PARSER)
+        return question, question_soup
 
-    def _rephrase_note_text_answer(self, text: str) -> str:
-        soup = BeautifulSoup(markup=text, features=NOTE_TEXT_PARSER)
+    def _append_note_text_answer(self, original_text: str, rephrased_question_text: str) -> str:
+        rephrased_soup = BeautifulSoup(markup=rephrased_question_text, features=NOTE_TEXT_PARSER)
+
+        original_answer_tags = self._get_answer_page_elements_from_original_text(text=original_text)
+        for tag in original_answer_tags:
+            rephrased_soup.body.append(tag)
+
+        return str(rephrased_soup)
+
+    @staticmethod
+    def _append_original_question(rephrased_text: str, original_question_soup: BeautifulSoup) -> str:
+        rephrased_soup = BeautifulSoup(markup=rephrased_text, features=NOTE_TEXT_PARSER)
 
         # Create a new <hr> tag
-        hr_tag = soup.new_tag("hr")
-        hr_tag['id'] = "original-question"
-        soup.body.append(hr_tag)
+        hr_tag = rephrased_soup.new_tag(name="hr")
+        hr_tag["id"] = "original-question"
+        rephrased_soup.body.append(hr_tag)
 
-        bold_tag = soup.new_tag("b")
+        bold_tag = rephrased_soup.new_tag(name="b")
         bold_tag.string = f"[{TUTOR_NAME}] Original Question"
-        p_tag = soup.new_tag("p")
+        p_tag = rephrased_soup.new_tag(name="p")
         p_tag.append(bold_tag)
-        soup.body.append(p_tag)
+        rephrased_soup.body.append(p_tag)
 
-        original_question = self._get_original_question_from_augmented_note_text(text=text)
-        original_question_soup = BeautifulSoup(markup=original_question, features=NOTE_TEXT_PARSER)
-        original_question_span = original_question_soup.find("span")
+        for page_element in original_question_soup.contents:
+            rephrased_soup.body.append(copy(page_element))
 
-        if original_question_span is None:
-            original_question_span = soup.new_tag("span")
-            original_question_span.string = original_question
+        rephrased_text = str(rephrased_soup)
+        return rephrased_text
 
-        soup.body.append(original_question_span)
-
-        modified_html = str(soup)
-        return modified_html
+    @staticmethod
+    def _get_answer_page_elements_from_original_text(text: str) -> List[Tag]:
+        soup = BeautifulSoup(markup=text, features=NOTE_TEXT_PARSER)
+        answer_page_elements = []
+        body = soup.find("body")
+        body_page_elements = body.contents if body is not None else []
+        next_answer_tag: Optional[Tag] = None
+        while len(body_page_elements) != 0 and len(answer_page_elements) == 0:
+            element = body_page_elements.pop(0)
+            if isinstance(element, Tag) and element.name == "hr" and element.get("id") == "answer":
+                answer_page_elements.append(copy(element))
+                next_answer_tag = element.next_sibling
+        while next_answer_tag is not None and next_answer_tag.name != "hr":
+            answer_page_elements.append(copy(next_answer_tag))
+            next_answer_tag = next_answer_tag.next_sibling
+        if len(answer_page_elements) == 0:
+            hr_tag = soup.new_tag("hr")
+            hr_tag["id"] = "answer"
+            answer_page_elements.append(hr_tag)
+            answer_paragraph = soup.new_tag("p")
+            answer = f"[{TUTOR_NAME}] Failed to extract original answer."
+            answer_paragraph.string = answer
+            answer_page_elements.append(answer_paragraph)
+        return answer_page_elements
 
 
 class BasicNoteWrapper(BasicNoteWrapperBase):
+    _original_front_texts = {}
     _rephrased_fronts = {}
-
-    def __init__(self, note: Note, display_original_question: bool):
-        super().__init__(note=note, display_original_question=display_original_question)
-        self._rephrased_front = self._rephrased_fronts.get(note.id)
 
     @property
     def rephrased(self) -> bool:
-        return self._rephrased_front is not None
+        return self._check_front_is_rephrased()
 
     @staticmethod
     def get_model_name() -> str:
@@ -247,16 +268,23 @@ class BasicNoteWrapper(BasicNoteWrapperBase):
         self._augment_front(ml_provider=ml_provider)
         self._augment_back(ml_provider=ml_provider)
 
-    def _do_restore_note(self):
-        pass
-
     def _augment_front(self, ml_provider: MLProvider):
-        if self._rephrased_front is None:
-            self._rephrased_front = self._generate_rephrased_front(ml_provider=ml_provider)
-            self._rephrased_fronts[self.id] = self._rephrased_front
+        if not self._check_front_is_rephrased():
+            self._rephrased_fronts[self.id] = self._generate_rephrased_front(ml_provider=ml_provider)
+            self._original_front_texts[self.id] = self._extract_front_text()
+
+    def _check_front_is_rephrased(self) -> bool:
+        rephrased = False
+        rephrased_front = self._rephrased_fronts.get(self.id)
+        if rephrased_front is not None:
+            current_front = self._extract_front_text()
+            original_front = self._original_front_texts.get(self.id)
+            if current_front == original_front:
+                rephrased = True
+        return rephrased
 
     def _generate_rephrased_front(self, ml_provider: MLProvider) -> str:
-        front = self._extract_note_front()
+        front = self._extract_front()
         prompt = LLM_NORMAL_NOTE_REPHRASING_FRONT_PROMPT.format(note_text=front)
         rephrased_front = ml_provider.completion(prompt=prompt)
         rephrased_front = rephrased_front.strip('"').strip("'")
@@ -268,30 +296,32 @@ class BasicNoteWrapper(BasicNoteWrapperBase):
         pass
 
     def _get_rephrased_question_from_original_question(self, question: str) -> str:
-        return self._rephrased_front
+        return self._rephrased_fronts[self.id]
 
     def _get_original_question_from_original_note_text(self, text: str) -> str:
-        return self._extract_note_front()
+        return self._extract_front_text()
 
-    def _get_original_question_from_augmented_note_text(self, text: str) -> str:
-        return self._extract_note_front()
+    def _get_original_question_from_rephrased_note_text(self, text: str) -> str:
+        return self._extract_front_text()
 
-    def _extract_note_front(self) -> str:
+    def _extract_front(self) -> str:
+        front_text = self._extract_front_text()
+        front = remove_tags(html=front_text)
+        return front
+
+    def _extract_front_text(self) -> str:
         note = self.get_note()
         front = note["Front"]
         return front
 
 
 class BasicAndReverseNoteWrapper(BasicNoteWrapper):
+    _original_back_texts = {}
     _rephrased_backs = {}
-
-    def __init__(self, note: Note, display_original_question: bool):
-        super().__init__(note=note, display_original_question=display_original_question)
-        self._rephrased_back = self._rephrased_backs.get(note.id)
 
     @property
     def rephrased(self) -> bool:
-        return super().rephrased and self._rephrased_back is not None
+        return super().rephrased and self._check_back_is_rephrased()
 
     @staticmethod
     def get_model_name() -> str:
@@ -301,48 +331,45 @@ class BasicAndReverseNoteWrapper(BasicNoteWrapper):
         self._augment_front(ml_provider=ml_provider)
         self._augment_back(ml_provider=ml_provider)
 
-    def _do_restore_note(self):
-        pass
-
     def _augment_back(self, ml_provider: MLProvider):
-        if self._rephrased_back is None:
-            self._rephrased_back = self._generate_rephrased_back(
-                ml_provider=ml_provider
-            )
-            self._rephrased_backs[self.id] = self._rephrased_back
+        if not self._check_back_is_rephrased():
+            self._rephrased_backs[self.id] = self._generate_rephrased_back(ml_provider=ml_provider)
+            self._original_back_texts[self.id] = self._extract_back_text()
+
+    def _check_back_is_rephrased(self) -> bool:
+        rephrased = False
+        rephrased_back = self._rephrased_backs.get(self.id)
+        if rephrased_back is not None:
+            current_back = self._extract_back_text()
+            original_back = self._original_back_texts.get(self.id)
+            if current_back == original_back:
+                rephrased = True
+        return rephrased
 
     def _get_rephrased_question_from_original_question(self, question: str) -> str:
-        front_string = self._extract_note_front_string()
-        if question == front_string:
-            rephrased_question = self._rephrased_front
+        front = self._extract_front()
+        if question == front:
+            rephrased_question = self._rephrased_fronts[self.id]
         else:
-            rephrased_question = self._rephrased_back
+            rephrased_question = self._rephrased_backs[self.id]
         return rephrased_question
-
-    def _extract_note_front_string(self) -> str:
-        front = self._extract_note_front()
-        soup = BeautifulSoup(markup=front, features=NOTE_TEXT_PARSER)
-        span = soup.find("span")
-        if span is not None:
-            front_string = span.string
-        else:
-            front_string = front
-        return front_string
 
     def _get_original_question_from_original_note_text(self, text: str) -> str:
         question_string = self._find_first_match_in_string(
-            target=text, first_sub=self._extract_note_front(), second_sub=self._extract_note_back()
+            target=text, first_sub=self._extract_front_text(), second_sub=self._extract_back_text()
         )
         return question_string
 
-    def _get_original_question_from_augmented_note_text(self, text: str) -> str:
+    def _get_original_question_from_rephrased_note_text(self, text: str) -> str:
+        rephrased_front = self._rephrased_fronts[self.id]
+        rephrased_back = self._rephrased_backs[self.id]
         rephrased_question = self._find_first_match_in_string(
-            target=text, first_sub=self._rephrased_front, second_sub=self._rephrased_back
+            target=text, first_sub=rephrased_front, second_sub=rephrased_back
         )
-        if rephrased_question == self._rephrased_front:
-            original_question = self._extract_note_front()
+        if rephrased_question == rephrased_front:
+            original_question = self._extract_front_text()
         else:
-            original_question = self._extract_note_back()
+            original_question = self._extract_back_text()
         return original_question
 
     @staticmethod
@@ -364,7 +391,7 @@ class BasicAndReverseNoteWrapper(BasicNoteWrapper):
         return match
 
     def _generate_rephrased_back(self, ml_provider: MLProvider) -> str:
-        back = self._extract_note_back()
+        back = self._extract_back()
         prompt = LLM_NORMAL_NOTE_REPHRASING_BACK_PROMPT.format(note_text=back)
         rephrased_back = ml_provider.completion(prompt=prompt)
         rephrased_back = rephrased_back.strip('"').strip("'")
@@ -372,27 +399,30 @@ class BasicAndReverseNoteWrapper(BasicNoteWrapper):
             rephrased_back = f"{back}<br><br><b>[{TUTOR_NAME}]</b> Failed to rephrase note back due to ambiguity."
         return rephrased_back
 
-    def _extract_note_back(self) -> str:
+    def _extract_back(self) -> str:
+        back_text = self._extract_back_text()
+        back = remove_tags(html=back_text)
+        return back
+
+    def _extract_back_text(self) -> str:
         note = self.get_note()
         back = note["Back"]
         return back
 
 
 class ClozeNoteWrapper(NoteWrapperBase):
-    _original_clozes = PersistentDict[int, str](file_name=CLOZE_DATA_FILE_NAME)
+    _original_clozes = {}
+    _original_clozes_pieces: Dict[int, Dict[int, List[str]]] = {}
     _rephrased_clozes = {}
 
     def __init__(self, note: Note, display_original_question: bool):
         super().__init__(note=note, display_original_question=display_original_question)
-        self._original_cloze = self._original_clozes.get(self.id)
+        self._original_cloze = self._original_clozes.get(note.id)
         self._rephrased_cloze = self._rephrased_clozes.get(self.id)
 
     @property
     def rephrased(self) -> bool:
-        is_rephrased = True
-        if not self._check_editor_is_open() and self._rephrased_cloze is None:
-            cloze = self._extract_cloze()
-            is_rephrased = cloze == self._rephrased_cloze
+        is_rephrased = self._rephrased_cloze is not None  # todo: check if the card has been modified
         return is_rephrased
 
     @staticmethod
@@ -400,40 +430,23 @@ class ClozeNoteWrapper(NoteWrapperBase):
         return "cloze"
 
     def rephrase_text(self, text: str, kind: str) -> str:
-        augmented_text = text
-        if kind == "reviewAnswer" and self._display_original_question and not self._check_editor_is_open():
-            augmented_text = self._augment_note_text_answer(text=text)
+        if kind == "reviewQuestion":
+            augmented_text = self._rephrase_note_text_cloze(text=text, hide=True)
+        else:
+            assert kind == "reviewAnswer"  # need to handle all possibilities
+            augmented_text = self._rephrase_note_text_cloze(text=text, hide=False)
+            if self._display_original_question:
+                augmented_text = self._append_original_question(
+                    text=text, augmented_text=augmented_text
+                )
         return augmented_text
 
     def _do_rephrase_note(self, ml_provider: MLProvider):
-        if not self._check_editor_is_open():
-            if self.id not in self._original_clozes:
-                cloze = self._extract_cloze()
-                self._original_clozes[self.id] = cloze
-                self._original_clozes.save()
-            if self._rephrased_cloze is None:
-                self._rephrased_cloze = self._generate_rephrased_cloze(ml_provider=ml_provider)
-                self._rephrased_clozes[self.id] = self._rephrased_cloze
-            print(f"rephrasing cloze: {self._rephrased_cloze}")
-            self._set_cloze(cloze=self._rephrased_cloze)
-
-    def _do_restore_note(self):
-        cloze = self._original_clozes.get(self.id)
-        if cloze is not None:
-            print(f"restoring cloze: {cloze}")
-            self._set_cloze(cloze=cloze)
-            del self._original_clozes[self.id]
-            self._original_clozes.save()
-
-    @staticmethod
-    def _check_editor_is_open() -> bool:
-        is_open = False
-        target_dialogs = ["Browse (", "Edit Current"]
-        for widget in mw.app.topLevelWidgets():
-            if widget.objectName() == "Dialog" and widget.isVisible() and widget.windowTitle() in target_dialogs:
-                is_open = True
-                break
-        return is_open
+        if self._rephrased_cloze is None:
+            original_cloze = self._extract_cloze()
+            self._original_cloze = strip_spaces_before_punctuation(text=original_cloze)
+            self._rephrased_cloze = self._generate_rephrased_cloze(ml_provider=ml_provider)
+            self._rephrased_clozes[self.id] = self._rephrased_cloze
 
     def _generate_rephrased_cloze(self, ml_provider: MLProvider) -> str:
         cloze = self._extract_cloze()
@@ -444,32 +457,46 @@ class ClozeNoteWrapper(NoteWrapperBase):
             rephrased_cloze = f"{cloze}<br><br><b>[{TUTOR_NAME}]</b> Failed to rephrase cloze due to ambiguity."
         return rephrased_cloze
 
-    def _set_cloze(self, cloze: str):
-        note = self.get_note()
-        note["Text"] = cloze
-        mw.col.update_note(note=note)
-
-    def _extract_cloze(self) -> str:
-        cloze_text = self._extract_cloze_text()
-        soup = BeautifulSoup(markup=cloze_text, features=NOTE_TEXT_PARSER)
-        cloze_span = soup.find("span")
-        if cloze_span is not None:
-            cloze = cloze_span.string
+    def _rephrase_note_text_cloze(self, text: str, hide: bool) -> str:
+        target_cloze_number = self._get_target_cloze_number(text=text)
+        if target_cloze_number is None:
+            rephrased_text = f"{text}<br><br><b>[{TUTOR_NAME}]</b> Failed to determine which cloze was deleted."
         else:
-            cloze = cloze_text
-        return cloze
+            rephrased_text = self._get_text_paragraph_for_cloze_number(
+                target_cloze_number=target_cloze_number,
+                cloze=self._rephrased_cloze,
+                hide=hide,
+            )
+            original_soup = BeautifulSoup(markup=text, features=NOTE_TEXT_PARSER)
+            style_tag = original_soup.find("style")
+            if style_tag is not None:
+                rephrased_soup = BeautifulSoup(features=NOTE_TEXT_PARSER)
+                html_tag = rephrased_soup.new_tag("html")
+                head = rephrased_soup.new_tag("head")
+                body = rephrased_soup.new_tag("body")
+                head.append(style_tag)
+                body.append(BeautifulSoup(markup=rephrased_text, features=NOTE_TEXT_PARSER).find("p"))
+                html_tag.append(head)
+                html_tag.append(body)
+                rephrased_soup.append(html_tag)
+                rephrased_text = str(rephrased_soup)
+        return rephrased_text
 
-    def _extract_cloze_text(self) -> str:
-        note = self.get_note()
-        cloze_text = note["Text"]
-        return cloze_text
-
-    def _augment_note_text_answer(self, text: str) -> str:
+    @staticmethod
+    def _get_target_cloze_number(text: str) -> Optional[int]:
         soup = BeautifulSoup(markup=text, features=NOTE_TEXT_PARSER)
+        cloze_span = soup.find("span", class_="cloze")
+        target_cloze_number = None
+        if cloze_span is not None:
+            target_cloze_number = int(cloze_span["data-ordinal"])
+        return target_cloze_number
+
+    def _append_original_question(self, text: str, augmented_text: str) -> str:
+        soup = BeautifulSoup(markup=augmented_text, features=NOTE_TEXT_PARSER)
 
         # Create a new <hr> tag
         hr_tag = soup.new_tag("hr")
-        hr_tag['id'] = "original-cloze"
+        hr_tag["id"] = "original-cloze"
         soup.body.append(hr_tag)
 
         bold_tag = soup.new_tag("b")
@@ -478,21 +505,78 @@ class ClozeNoteWrapper(NoteWrapperBase):
         p_tag.append(bold_tag)
         soup.body.append(p_tag)
 
-        original_cloze = self._original_clozes.get(self.id)
-        original_cloze_without_markers = self._remove_cloze_markers(cloze=original_cloze)
-        original_cloze_soup = BeautifulSoup(markup=original_cloze_without_markers, features=NOTE_TEXT_PARSER)
-        original_cloze_span = original_cloze_soup.find("span")
+        original_soup = BeautifulSoup(markup=text, features=NOTE_TEXT_PARSER)
+        original_cloze_body = original_soup.find("body")
+        original_cloze_paragraph_page_elements = original_cloze_body.contents
 
-        if original_cloze_span is None:
-            original_cloze_span = soup.new_tag("span")
-            original_cloze_span.string = original_cloze_without_markers
-
-        soup.body.append(original_cloze_span)
+        if len(original_cloze_paragraph_page_elements) != 0:
+            for element in original_cloze_paragraph_page_elements:
+                soup.body.append(copy(element))
+        else:
+            target_cloze_number = self._get_target_cloze_number(text=text)
+            original_cloze_paragraph_page_elements = self._get_text_paragraph_for_cloze_number(
+                target_cloze_number=target_cloze_number,
+                cloze=self._original_cloze,
+                hide=False,
+            )
+            original_cloze_soup = BeautifulSoup(markup=original_cloze_paragraph_page_elements, features=NOTE_TEXT_PARSER)
+            soup.body.append(original_cloze_soup.find("p"))
 
         modified_html = str(soup)
         return modified_html
+
+    def _get_text_paragraph_for_cloze_number(
+        self, target_cloze_number: int, cloze: str, hide: bool
+    ) -> str:
+        cloze_pieces = self._extract_cloze_pieces(cloze=cloze)
+        for cloze_number, cloze_number_pieces in cloze_pieces.items():
+            span_class = "cloze" if cloze_number == target_cloze_number else "cloze-inactive"
+            if hide and cloze_number == target_cloze_number:
+                cloze = self._replace_next_cloze_deletion(
+                    cloze=cloze,
+                    cloze_deletion_number=cloze_number,
+                    new_text=(
+                        f"<span class=\"{span_class}\" data-ordinal=\"{cloze_number}\">[...]</span>"
+                    ),
+                )
+            else:
+                for cloze_number_piece in cloze_number_pieces:
+                    cloze = self._replace_next_cloze_deletion(
+                        cloze=cloze,
+                        cloze_deletion_number=cloze_number,
+                        new_text=(
+                            f"<span class=\"{span_class}\" data-ordinal=\"{cloze_number}\">{cloze_number_piece}</span>"
+                        ),
+                        count=1,
+                    )
+        cloze_text = self._remove_cloze_markers(cloze=cloze)
+        cloze_text = f"<p>{cloze_text}</p>"
+        return cloze_text
+
+    @staticmethod
+    def _extract_cloze_pieces(cloze: str) -> Dict[int, List[str]]:
+        cloze_pieces = defaultdict(list)
+        for i, match in enumerate(re.finditer(r"{{c(\d)::(.*?)}}", cloze)):
+            cloze_pieces[int(match.group(1))].append(match.group(2))
+        return cloze_pieces
+
+    def _extract_cloze(self) -> str:
+        cloze_text = self._extract_cloze_text()
+        cloze = remove_tags(html=cloze_text)
+        return cloze
+
+    def _extract_cloze_text(self) -> str:
+        note = self.get_note()
+        cloze_text = note["Text"]
+        return cloze_text
 
     @staticmethod
     def _remove_cloze_markers(cloze: str) -> str:
         cloze_without_markers = re.sub(r"{{c\d::(.*?)}}", r"\1", cloze)
         return cloze_without_markers
+
+    @staticmethod
+    def _replace_next_cloze_deletion(cloze: str, cloze_deletion_number: int, new_text: str, count=0) -> str:
+        pattern = r"{{c" + str(cloze_deletion_number) + r"::(.*?)}}"
+        cloze_with_replacement = re.sub(pattern, new_text, cloze, count=count)
+        return cloze_with_replacement

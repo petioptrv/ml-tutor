@@ -30,13 +30,8 @@ class AnkiAddon:
         gui_hooks.collection_did_load.append(self._ml_tutor.on_collection_load)
         gui_hooks.card_will_show.append(self._ml_tutor.on_card_will_show)
         gui_hooks.reviewer_did_show_answer.append(self._ml_tutor.on_reviewer_did_show_answer)
-        gui_hooks.editor_did_init.append(self._ml_tutor.on_editor_did_init)
-        gui_hooks.sync_will_start.append(self._ml_tutor.on_sync_will_start)
-        gui_hooks.sync_did_finish.append(self._ml_tutor.on_sync_did_finish)
 
-        gui_hooks.profile_will_close.append(self._ml_tutor.on_profile_will_close)
-
-    def _on_config_update(self, text: str, addon: str) -> str:
+    def _on_config_update(self, text: str, _: str) -> str:
         config = json.loads(text)
         self._set_ml_provider(config=config)
         self._ml_tutor.set_display_original_question(display_original_question=config["display-original-question"])
