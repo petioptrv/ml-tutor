@@ -429,15 +429,9 @@ class ClozeNoteWrapper(NoteWrapperBase):
     _original_clozes_pieces: Dict[int, Dict[int, List[str]]] = {}
     _rephrased_clozes = {}
 
-    def __init__(self, note: Note, display_original_question: bool):
-        super().__init__(note=note, display_original_question=display_original_question)
-        self._original_cloze = self._original_clozes.get(note.id)
-        self._rephrased_cloze = self._rephrased_clozes.get(self.id)
-
     @property
     def rephrased(self) -> bool:
-        is_rephrased = self._rephrased_cloze is not None  # todo: check if the card has been modified
-        return is_rephrased
+        return self._check_cloze_is_rephrased()
 
     @staticmethod
     def get_model_name() -> str:
@@ -456,11 +450,20 @@ class ClozeNoteWrapper(NoteWrapperBase):
         return augmented_text
 
     def _do_rephrase_note(self, ml_provider: MLProvider):
-        if self._rephrased_cloze is None:
+        if not self._check_cloze_is_rephrased():
             original_cloze = self._extract_cloze()
-            self._original_cloze = strip_spaces_before_punctuation(text=original_cloze)
-            self._rephrased_cloze = self._generate_rephrased_cloze(ml_provider=ml_provider)
-            self._rephrased_clozes[self.id] = self._rephrased_cloze
+            self._original_clozes[self.id] = original_cloze
+            self._rephrased_clozes[self.id] = self._generate_rephrased_cloze(ml_provider=ml_provider)
+
+    def _check_cloze_is_rephrased(self) -> bool:
+        rephrased = False
+        rephrased_cloze = self._rephrased_clozes.get(self.id)
+        if rephrased_cloze is not None:
+            current_cloze = self._extract_cloze()
+            original_cloze = self._original_clozes.get(self.id)
+            if current_cloze == original_cloze:
+                rephrased = True
+        return rephrased
 
     def _generate_rephrased_cloze(self, ml_provider: MLProvider) -> str:
         cloze = self._extract_cloze()
@@ -478,7 +481,7 @@ class ClozeNoteWrapper(NoteWrapperBase):
         else:
             rephrased_text = self._get_text_paragraph_for_cloze_number(
                 target_cloze_number=target_cloze_number,
-                cloze=self._rephrased_cloze,
+                cloze=self._rephrased_clozes[self.id],
                 hide=hide,
             )
             original_soup = BeautifulSoup(markup=text, features=NOTE_TEXT_PARSER)
@@ -523,7 +526,7 @@ class ClozeNoteWrapper(NoteWrapperBase):
             target_cloze_number = self._get_target_cloze_number(text=text)
             original_cloze_paragraph_page_elements = self._get_text_paragraph_for_cloze_number(
                 target_cloze_number=target_cloze_number,
-                cloze=self._original_cloze,
+                cloze=self._original_clozes[self.id],
                 hide=False,
             )
             original_cloze_soup = BeautifulSoup(markup=original_cloze_paragraph_page_elements, features=NOTE_TEXT_PARSER)
