@@ -1,7 +1,7 @@
 
 TUTOR_NAME = "ML-Tutor"
 REPHRASE_CARDS_AHEAD = 3
-NOTE_TEXT_PARSER = "html"
+NOTE_TEXT_PARSER = "html.parser"
 LLM_NORMAL_NOTE_REPHRASING_FRONT_PROMPT = """
 Given the spaced-repetition note front text: '{note_text}', please attempt to rephrase
 the note front in a way that retains the core information and intent but alters the

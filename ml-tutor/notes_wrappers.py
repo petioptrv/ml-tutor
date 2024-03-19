@@ -151,10 +151,9 @@ class BasicNoteWrapperBase(NoteWrapperBase, ABC):
         return rephrased_text
 
     def _rephrase_note_text_question(self, text: str) -> Tuple[str, BeautifulSoup]:
+        soup = BeautifulSoup(markup=text, features=NOTE_TEXT_PARSER)
         rephrased_question_soup = BeautifulSoup(features=NOTE_TEXT_PARSER)
-        self._maybe_add_style_tag_to_rephrased_question_soup(
-            rephrased_question_soup=rephrased_question_soup, text=text
-        )
+        rephrased_question_soup.append(copy(soup.find(name="style")))
         original_question, original_question_soup = self._get_question_from_original_text(text=text)
         rephrased_question = self._get_rephrased_question_from_original_question(
             question=original_question
@@ -162,29 +161,14 @@ class BasicNoteWrapperBase(NoteWrapperBase, ABC):
         rephrased_question_paragraph = build_html_paragraph_from_text(
             soup=rephrased_question_soup, text=rephrased_question
         )
-        html_tag = rephrased_question_soup.find(name="html")
-        html_tag.append(rephrased_question_paragraph)
+        rephrased_question_soup.append(rephrased_question_paragraph)
         return str(rephrased_question_soup), original_question_soup
-
-    @staticmethod
-    def _maybe_add_style_tag_to_rephrased_question_soup(
-        rephrased_question_soup: BeautifulSoup, text: str
-    ):
-        soup = BeautifulSoup(markup=text, features=NOTE_TEXT_PARSER)
-        html_tag = rephrased_question_soup.new_tag(name="html")
-        rephrased_question_soup.append(html_tag)
-        style = soup.find("style")
-        if style is not None:
-            head_tag = rephrased_question_soup.new_tag(name="head")
-            head_tag.append(copy(style))
-            html_tag.append(head_tag)
 
     def _get_question_from_original_text(self, text: str) -> Tuple[str, BeautifulSoup]:
         soup = BeautifulSoup(markup=text, features=NOTE_TEXT_PARSER)
         question_soup = BeautifulSoup(features=NOTE_TEXT_PARSER)
-        body = soup.find("body")
-        body_page_elements = body.contents
-        for element in body_page_elements:
+        page_elements = list(soup.find("style").next_siblings)
+        for element in page_elements:
             if isinstance(element, Tag) and element.name == "hr":
                 break
             else:
@@ -201,7 +185,7 @@ class BasicNoteWrapperBase(NoteWrapperBase, ABC):
 
         original_answer_tags = self._get_answer_page_elements_from_original_text(text=original_text)
         for tag in original_answer_tags:
-            rephrased_soup.body.append(tag)
+            rephrased_soup.append(tag)
 
         return str(rephrased_soup)
 
@@ -212,16 +196,16 @@ class BasicNoteWrapperBase(NoteWrapperBase, ABC):
         # Create a new <hr> tag
         hr_tag = rephrased_soup.new_tag(name="hr")
         hr_tag["id"] = "original-question"
-        rephrased_soup.body.append(hr_tag)
+        rephrased_soup.append(hr_tag)
 
         bold_tag = rephrased_soup.new_tag(name="b")
         bold_tag.string = f"[{TUTOR_NAME}] Original Question"
         p_tag = rephrased_soup.new_tag(name="p")
         p_tag.append(bold_tag)
-        rephrased_soup.body.append(p_tag)
+        rephrased_soup.append(p_tag)
 
         for page_element in original_question_soup.contents:
-            rephrased_soup.body.append(copy(page_element))
+            rephrased_soup.append(copy(page_element))
 
         rephrased_text = str(rephrased_soup)
         return rephrased_text
@@ -230,11 +214,10 @@ class BasicNoteWrapperBase(NoteWrapperBase, ABC):
     def _get_answer_page_elements_from_original_text(text: str) -> List[Tag]:
         soup = BeautifulSoup(markup=text, features=NOTE_TEXT_PARSER)
         answer_page_elements = []
-        body = soup.find("body")
-        body_page_elements = body.contents if body is not None else []
+        page_elements = list(soup.find("style").next_siblings)
         next_answer_tag: Optional[Tag] = None
-        while len(body_page_elements) != 0 and len(answer_page_elements) == 0:
-            element = body_page_elements.pop(0)
+        while len(page_elements) != 0 and len(answer_page_elements) == 0:
+            element = page_elements.pop(0)
             if isinstance(element, Tag) and element.name == "hr" and element.get("id") == "answer":
                 answer_page_elements.append(copy(element))
                 next_answer_tag = element.next_sibling
@@ -471,14 +454,8 @@ class ClozeNoteWrapper(NoteWrapperBase):
             style_tag = original_soup.find("style")
             if style_tag is not None:
                 rephrased_soup = BeautifulSoup(features=NOTE_TEXT_PARSER)
-                html_tag = rephrased_soup.new_tag("html")
-                head = rephrased_soup.new_tag("head")
-                body = rephrased_soup.new_tag("body")
-                head.append(style_tag)
-                body.append(BeautifulSoup(markup=rephrased_text, features=NOTE_TEXT_PARSER).find("p"))
-                html_tag.append(head)
-                html_tag.append(body)
-                rephrased_soup.append(html_tag)
+                rephrased_soup.append(style_tag)
+                rephrased_soup.append(BeautifulSoup(markup=rephrased_text, features=NOTE_TEXT_PARSER).find("p"))
                 rephrased_text = str(rephrased_soup)
         return rephrased_text
 
@@ -497,21 +474,20 @@ class ClozeNoteWrapper(NoteWrapperBase):
         # Create a new <hr> tag
         hr_tag = soup.new_tag("hr")
         hr_tag["id"] = "original-cloze"
-        soup.body.append(hr_tag)
+        soup.append(hr_tag)
 
         bold_tag = soup.new_tag("b")
         bold_tag.string = f"[{TUTOR_NAME}] Original Cloze"
         p_tag = soup.new_tag("p")
         p_tag.append(bold_tag)
-        soup.body.append(p_tag)
+        soup.append(p_tag)
 
         original_soup = BeautifulSoup(markup=text, features=NOTE_TEXT_PARSER)
-        original_cloze_body = original_soup.find("body")
-        original_cloze_paragraph_page_elements = original_cloze_body.contents
+        original_cloze_paragraph_page_elements = list(original_soup.find("style").next_siblings)
 
         if len(original_cloze_paragraph_page_elements) != 0:
             for element in original_cloze_paragraph_page_elements:
-                soup.body.append(copy(element))
+                soup.append(copy(element))
         else:
             target_cloze_number = self._get_target_cloze_number(text=text)
             original_cloze_paragraph_page_elements = self._get_text_paragraph_for_cloze_number(
@@ -520,7 +496,7 @@ class ClozeNoteWrapper(NoteWrapperBase):
                 hide=False,
             )
             original_cloze_soup = BeautifulSoup(markup=original_cloze_paragraph_page_elements, features=NOTE_TEXT_PARSER)
-            soup.body.append(original_cloze_soup.find("p"))
+            soup.append(original_cloze_soup.find("p"))
 
         modified_html = str(soup)
         return modified_html
