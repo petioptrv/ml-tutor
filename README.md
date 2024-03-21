@@ -1,8 +1,8 @@
-<p style="text-align:center"><img src="resources/ml-tutor-basic.png" width="700"><br><img src="resources/ml-tutor-cloze.png" width="700"></p>
-
 This is an add-on for the spaced-repetition flashcard app [Anki](https://apps.ankiweb.net/).
 It uses ChatGPT to rephrase the card question at time of review in order to force the user to focus on the
 question semantics rather than to memorize and respond to the exact wording of the question.
+
+<p style="text-align:center"><img src="resources/ml-tutor-basic.png" width="700"><br><img src="resources/ml-tutor-cloze.png" width="700"></p>
 
 ### Motivation
 
@@ -27,7 +27,7 @@ themselves.
 
 ### Installation
 
-- LINK TO ANKI WEB !!!!!!!!!!!!!!!!!!!!!!!!!!!
+- Install the add-on from AnkiWeb [here](https://ankiweb.net/shared/info/1505658371).
 
 ### Configuration
 
@@ -37,9 +37,18 @@ note should be displayed along with the answer. The configuration changes do not
 
 ### Contributing
 
-- Open an issue !!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!
-- Submit a request !!!!!!!!!!!!!!!!!!!!!!!!!!!!
+- Pull requests to the [repo](https://github.com/petioptrv/ml-tutor) are welcome!
+- For bugs/issues and feature requests, please open an [issue ticket](https://github.com/petioptrv/ml-tutor/issues).
+  - The more information you provide, the better. For example, if you are experiencing a bug, please provide the
+    following:
+    - The note type of the card
+    - The card's HTML
+    - The error message
+    - The expected behavior
+    - The actual behavior
+    - The steps to reproduce the error
+    - Screenshots
 
 ### Contact
 
-TODO !!!!!!!!!!!!!!!!!!!!!!!!!!!!!
+petioptrv@icloud.com

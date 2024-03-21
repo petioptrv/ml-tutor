@@ -437,4 +437,5 @@ $RECYCLE.BIN/
 # End of https://www.toptal.com/developers/gitignore/api/macos,linux,windows,intellij,visualstudiocode,python,qt
 
 /ml-tutor/meta.json
-/ml-tutor/card_id_map.json
+
+*.ankiaddon
