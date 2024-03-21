@@ -36,10 +36,11 @@ from collections import defaultdict
 from copy import copy
 from threading import Event
 from typing import Union, Optional, Dict, List, Tuple
+import warnings
 
 from anki.notes_pb2 import Note
 from aqt import mw
-from bs4 import BeautifulSoup, Tag
+from bs4 import BeautifulSoup, Tag, MarkupResemblesLocatorWarning
 
 from .utils import Singleton, remove_tags, strip_spaces_before_punctuation, build_html_paragraph_from_text
 from .constants import (
@@ -50,6 +51,8 @@ from .constants import (
     LLM_CLOZE_NOTE_REPHRASING_PROMPT,
 )
 from .ml.ml_provider import MLProvider
+
+warnings.filterwarnings("ignore", category=MarkupResemblesLocatorWarning, module="bs4")
 
 
 class NotesWrapperFactory(metaclass=Singleton):
@@ -303,7 +306,8 @@ class BasicNoteWrapper(BasicNoteWrapperBase):
 
     def _generate_rephrased_front(self, ml_provider: MLProvider) -> str:
         front = self._extract_front()
-        prompt = LLM_NORMAL_NOTE_REPHRASING_FRONT_PROMPT.format(note_text=front)
+        back = self._extract_back()
+        prompt = LLM_NORMAL_NOTE_REPHRASING_FRONT_PROMPT.format(note_front=front, note_back=back)
         rephrased_front = ml_provider.completion(prompt=prompt)
         rephrased_front = rephrased_front.strip('"').strip("'")
         if len(rephrased_front) == 0:
@@ -331,6 +335,16 @@ class BasicNoteWrapper(BasicNoteWrapperBase):
         note = self.get_note()
         front = note["Front"]
         return front
+
+    def _extract_back(self) -> str:
+        back_text = self._extract_back_text()
+        back = remove_tags(html=back_text)
+        return back
+
+    def _extract_back_text(self) -> str:
+        note = self.get_note()
+        back = note["Back"]
+        return back
 
 
 class BasicAndReverseNoteWrapper(BasicNoteWrapper):
@@ -409,23 +423,14 @@ class BasicAndReverseNoteWrapper(BasicNoteWrapper):
         return match
 
     def _generate_rephrased_back(self, ml_provider: MLProvider) -> str:
+        front = self._extract_front()
         back = self._extract_back()
-        prompt = LLM_NORMAL_NOTE_REPHRASING_BACK_PROMPT.format(note_text=back)
+        prompt = LLM_NORMAL_NOTE_REPHRASING_BACK_PROMPT.format(note_front=front, note_back=back)
         rephrased_back = ml_provider.completion(prompt=prompt)
         rephrased_back = rephrased_back.strip('"').strip("'")
         if len(rephrased_back) == 0:
             rephrased_back = f"{back}<br><br><b>[{TUTOR_NAME}]</b> Failed to rephrase note back due to ambiguity."
         return rephrased_back
-
-    def _extract_back(self) -> str:
-        back_text = self._extract_back_text()
-        back = remove_tags(html=back_text)
-        return back
-
-    def _extract_back_text(self) -> str:
-        note = self.get_note()
-        back = note["Back"]
-        return back
 
 
 class ClozeNoteWrapper(NoteWrapperBase):
@@ -567,11 +572,14 @@ class ClozeNoteWrapper(NoteWrapperBase):
         cloze_text = f"<p>{cloze_text}</p>"
         return cloze_text
 
-    @staticmethod
-    def _extract_cloze_pieces(cloze: str) -> Dict[int, List[str]]:
-        cloze_pieces = defaultdict(list)
-        for i, match in enumerate(re.finditer(r"{{c(\d)::(.*?)}}", cloze)):
-            cloze_pieces[int(match.group(1))].append(match.group(2))
+    def _extract_cloze_pieces(self, cloze: str) -> Dict[int, List[str]]:
+        cloze_pieces: Dict[int, List[str]] = defaultdict(list)
+        for i, match in enumerate(re.finditer(r"{{c([0-9]+)::((?:{{.*?}}|[^{}])*?)}}", cloze)):
+            cloze_piece = match.group(2)
+            cloze_pieces[int(match.group(1))].append(cloze_piece)
+            cloze_sub_pieces = self._extract_cloze_pieces(cloze=cloze_piece)
+            for cloze_sub_piece_number, cloze_sub_pieces_list in cloze_sub_pieces.items():
+                cloze_pieces[cloze_sub_piece_number].extend(cloze_sub_pieces_list)
         return cloze_pieces
 
     def _extract_cloze(self) -> str:
@@ -586,11 +594,16 @@ class ClozeNoteWrapper(NoteWrapperBase):
 
     @staticmethod
     def _remove_cloze_markers(cloze: str) -> str:
-        cloze_without_markers = re.sub(r"{{c\d::(.*?)}}", r"\1", cloze)
+        pattern = r"{{c\d::(.*?)}}"
+        cloze_without_markers = cloze
+        while re.search(pattern=pattern, string=cloze_without_markers) is not None:
+            cloze_without_markers = re.sub(
+                pattern=pattern, repl=r"\1", string=cloze_without_markers
+            )
         return cloze_without_markers
 
     @staticmethod
     def _replace_next_cloze_deletion(cloze: str, cloze_deletion_number: int, new_text: str, count=0) -> str:
-        pattern = r"{{c" + str(cloze_deletion_number) + r"::(.*?)}}"
+        pattern = r"{{c" + str(cloze_deletion_number) + r"::((?:[^{}]+|{{.*?}})*)}}"
         cloze_with_replacement = re.sub(pattern, new_text, cloze, count=count)
         return cloze_with_replacement
