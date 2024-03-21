@@ -42,7 +42,7 @@ from anki.notes_pb2 import Note
 from aqt import mw
 from bs4 import BeautifulSoup, Tag, MarkupResemblesLocatorWarning
 
-from .utils import Singleton, remove_tags, strip_spaces_before_punctuation, build_html_paragraph_from_text
+from .utils import Singleton, remove_tags, build_html_paragraph_from_text
 from .constants import (
     LLM_NORMAL_NOTE_REPHRASING_FRONT_PROMPT,
     TUTOR_NAME,

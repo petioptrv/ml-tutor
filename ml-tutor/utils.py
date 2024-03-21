@@ -30,10 +30,13 @@
 # Any modifications to this file must keep this entire header intact.
 
 import re
+import warnings
 
-from bs4 import BeautifulSoup, Tag
+from bs4 import BeautifulSoup, Tag, MarkupResemblesLocatorWarning
 
 from .constants import NOTE_TEXT_PARSER
+
+warnings.filterwarnings("ignore", category=MarkupResemblesLocatorWarning, module="bs4")
 
 
 class Singleton(type):
