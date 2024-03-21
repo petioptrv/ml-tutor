@@ -52,7 +52,7 @@ from .constants import (
 )
 from .ml.ml_provider import MLProvider
 
-warnings.filterwarnings("ignore", category=MarkupResemblesLocatorWarning, module="bs4")
+warnings.filterwarnings("ignore", category=MarkupResemblesLocatorWarning)
 
 
 class NotesWrapperFactory(metaclass=Singleton):

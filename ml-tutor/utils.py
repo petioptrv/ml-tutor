@@ -36,7 +36,7 @@ from bs4 import BeautifulSoup, Tag, MarkupResemblesLocatorWarning
 
 from .constants import NOTE_TEXT_PARSER
 
-warnings.filterwarnings("ignore", category=MarkupResemblesLocatorWarning, module="bs4")
+warnings.filterwarnings("ignore", category=MarkupResemblesLocatorWarning)
 
 
 class Singleton(type):
