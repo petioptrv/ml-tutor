@@ -34,10 +34,9 @@ from anki.collection import Collection
 from anki.notes_pb2 import Note
 from anki.scheduler.v3 import QueuedCards
 from aqt import mw
-from qt.aqt.operations import QueryOp
-from qt.aqt.progress import ProgressManager
+from aqt.operations import QueryOp
 
-from .constants import REPHRASE_CARDS_AHEAD, TUTOR_NAME
+from .constants import REPHRASE_CARDS_AHEAD
 from .notes_wrappers import NotesWrapperFactory
 from .ml.ml_provider import MLProvider
 

@@ -31,7 +31,7 @@ themselves.
 
 ### Configuration
 
-In the configs, you can set the API key, the OpenAI model
+In the configs (Tools -> Add-ons -> select "ML-Tutor" -> Config), you can set the API key, the OpenAI model
 (see [OpenAI models](https://platform.openai.com/docs/models/models)), and whether the original question of the
 note should be displayed along with the answer. The configuration changes do not require a restart of the Anki app.
 
