@@ -476,7 +476,7 @@ class ClozeNoteWrapper(NoteWrapperBase):
 
     def _generate_rephrased_cloze(self, ml_provider: MLProvider) -> str:
         cloze = self._extract_cloze()
-        prompt = LLM_CLOZE_NOTE_REPHRASING_PROMPT.format(note_text=cloze)
+        prompt = LLM_CLOZE_NOTE_REPHRASING_PROMPT.format(note_cloze=cloze)
         rephrased_cloze = ml_provider.completion(prompt=prompt)
         rephrased_cloze = rephrased_cloze.strip('"').strip("'")
         if len(rephrased_cloze) == 0:
@@ -551,20 +551,22 @@ class ClozeNoteWrapper(NoteWrapperBase):
         for cloze_number, cloze_number_pieces in cloze_pieces.items():
             span_class = "cloze" if cloze_number == target_cloze_number else "cloze-inactive"
             if hide and cloze_number == target_cloze_number:
+                cloze_place_holder = cloze_number_pieces[0][1]
                 cloze = self._replace_next_cloze_deletion(
                     cloze=cloze,
                     cloze_deletion_number=cloze_number,
                     new_text=(
-                        f"<span class=\"{span_class}\" data-ordinal=\"{cloze_number}\">[...]</span>"
+                        f"<span class=\"{span_class}\" data-ordinal=\"{cloze_number}\">[{cloze_place_holder}]</span>"
                     ),
                 )
             else:
                 for cloze_number_piece in cloze_number_pieces:
+                    cloze_piece = cloze_number_piece[0]
                     cloze = self._replace_next_cloze_deletion(
                         cloze=cloze,
                         cloze_deletion_number=cloze_number,
                         new_text=(
-                            f"<span class=\"{span_class}\" data-ordinal=\"{cloze_number}\">{cloze_number_piece}</span>"
+                            f"<span class=\"{span_class}\" data-ordinal=\"{cloze_number}\">{cloze_piece}</span>"
                         ),
                         count=1,
                     )
@@ -572,11 +574,14 @@ class ClozeNoteWrapper(NoteWrapperBase):
         cloze_text = f"<p>{cloze_text}</p>"
         return cloze_text
 
-    def _extract_cloze_pieces(self, cloze: str) -> Dict[int, List[str]]:
-        cloze_pieces: Dict[int, List[str]] = defaultdict(list)
-        for i, match in enumerate(re.finditer(r"{{c([0-9]+)::((?:{{.*?}}|[^{}])*?)}}", cloze)):
-            cloze_piece = match.group(2)
-            cloze_pieces[int(match.group(1))].append(cloze_piece)
+    def _extract_cloze_pieces(self, cloze: str) -> Dict[int, List[Tuple[str, str]]]:
+        cloze_pieces: Dict[int, List[Tuple[str, str]]] = defaultdict(list)
+        pattern = re.compile(r"{{c([0-9]+)::((?:{{(?:{{.*?}}|[^{}])*?}}|[^{}])*?)(?:(?:::)([^{}]+))?}}")
+        for i, match in enumerate(re.finditer(pattern=pattern, string=cloze)):
+            groups = match.groups()
+            cloze_piece = groups[1]
+            cloze_place_holder = "..." if groups[2] is None else groups[2]
+            cloze_pieces[int(match.group(1))].append((cloze_piece, cloze_place_holder))
             cloze_sub_pieces = self._extract_cloze_pieces(cloze=cloze_piece)
             for cloze_sub_piece_number, cloze_sub_pieces_list in cloze_sub_pieces.items():
                 cloze_pieces[cloze_sub_piece_number].extend(cloze_sub_pieces_list)
@@ -594,7 +599,7 @@ class ClozeNoteWrapper(NoteWrapperBase):
 
     @staticmethod
     def _remove_cloze_markers(cloze: str) -> str:
-        pattern = r"{{c\d::(.*?)}}"
+        pattern = re.compile(r"{{c\d::(.*?)(?:::.+)?}}")
         cloze_without_markers = cloze
         while re.search(pattern=pattern, string=cloze_without_markers) is not None:
             cloze_without_markers = re.sub(
@@ -604,6 +609,6 @@ class ClozeNoteWrapper(NoteWrapperBase):
 
     @staticmethod
     def _replace_next_cloze_deletion(cloze: str, cloze_deletion_number: int, new_text: str, count=0) -> str:
-        pattern = r"{{c" + str(cloze_deletion_number) + r"::((?:[^{}]+|{{.*?}})*)}}"
+        pattern = re.compile(r"{{c" + str(cloze_deletion_number) + r"::((?:[^{}]+|{{.*?}})*)}}")
         cloze_with_replacement = re.sub(pattern, new_text, cloze, count=count)
         return cloze_with_replacement
