@@ -17,7 +17,15 @@ connection and a valid API key (see [here](https://platform.openai.com/docs/quic
 information).
 
 The add-on operates exclusively on the HTML text before it is displayed by Anki. As such, it never modifies the notes
-themselves.
+themselves. Notes are rephrased slightly ahead of time in order to provide a smoother experience, but if the user
+goes through the notes quickly, there may be some loading time before a subsequent note is rephrased.
+
+Rephrased notes are cached for the duration of the app session, meaning that the same rephrasing will be reused
+until the app is restarted, at which point a new phrasing will be generated. Editing a note will trigger a new
+rephrasing.
+
+The formatting of the answer is preserved, but the rephrased question does not attempt to mimic the formatting of the
+original question in any way. In other words, the rephrased question is in plain text.
 
 ### Supported Note Types
 
@@ -34,6 +42,12 @@ themselves.
 In the configs (Tools -> Add-ons -> select "ML-Tutor" -> Config), you can set the API key, the OpenAI model
 (see [OpenAI models](https://platform.openai.com/docs/models/models)), and whether the original question of the
 note should be displayed along with the answer. The configuration changes do not require a restart of the Anki app.
+
+#### A Note On GPT Models
+
+GPT-4 models are currently only available to [paying customers](https://help.openai.com/en/articles/7102672-how-can-i-access-gpt-4),
+which means that you need to pay a monthly bill of at least 5 USD before you can use those models. GPT-3 are available
+to everyone (but still on a pay-per-use basis).
 
 ### Contributing
 
