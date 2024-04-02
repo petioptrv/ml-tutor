@@ -607,8 +607,13 @@ class ClozeNoteWrapper(NoteWrapperBase):
             )
         return cloze_without_markers
 
-    @staticmethod
-    def _replace_next_cloze_deletion(cloze: str, cloze_deletion_number: int, new_text: str, count=0) -> str:
+    def _replace_next_cloze_deletion(self, cloze: str, cloze_deletion_number: int, new_text: str, count=0) -> str:
+        new_text = self._sanitize_string_for_regex(string=new_text)
         pattern = re.compile(r"{{c" + str(cloze_deletion_number) + r"::((?:[^{}]+|{{.*?}})*)}}")
         cloze_with_replacement = re.sub(pattern, new_text, cloze, count=count)
         return cloze_with_replacement
+
+    @staticmethod
+    def _sanitize_string_for_regex(string: str) -> str:
+        string = string.replace("\\", "\\\\")
+        return string
