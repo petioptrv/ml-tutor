@@ -38,6 +38,7 @@ from threading import Event
 from typing import Union, Optional, Dict, List, Tuple
 import warnings
 
+from anki.cards import Card
 from anki.notes_pb2 import Note
 from aqt import mw
 from bs4 import BeautifulSoup, Tag, MarkupResemblesLocatorWarning
@@ -108,6 +109,11 @@ class NoteWrapperBase(ABC, metaclass=DecoratorRegistryMeta):
         ...
 
     @abstractmethod
+    def should_rephrase(self, card: Card) -> bool:
+        """We may want to not rephrase new cards."""
+        ...
+
+    @abstractmethod
     def rephrase_text(self, text: str, kind: str) -> str:
         ...
 
@@ -156,6 +162,9 @@ class PassThroughNoteWrapper(NoteWrapperBase):
     def get_model_name() -> str:
         return ""
 
+    def should_rephrase(self, card: Card) -> bool:
+        return False
+
     def rephrase_text(self, text: str, kind: str) -> str:
         return text
 
@@ -175,6 +184,9 @@ class BasicNoteWrapperBase(NoteWrapperBase, ABC):
     @abstractmethod
     def _get_original_question_from_rephrased_note_text(self, text: str) -> str:
         ...
+
+    def should_rephrase(self, card: Card) -> bool:
+        return card.queue != 0
 
     def rephrase_text(self, text: str, kind: str) -> str:
         rephrased_text, original_question_soup = self._rephrase_note_text_question(text=text)
@@ -445,6 +457,9 @@ class ClozeNoteWrapper(NoteWrapperBase):
     @staticmethod
     def get_model_name() -> str:
         return "cloze"
+
+    def should_rephrase(self, card: Card) -> bool:
+        return card.queue != 0
 
     def rephrase_text(self, text: str, kind: str) -> str:
         if kind == "reviewQuestion":

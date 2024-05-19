@@ -75,7 +75,9 @@ class MLTutor:
             else:
                 decorated_note.rephrase_note(ml_provider=self._ml_provider)
 
-        text = decorated_note.rephrase_text(text=text, kind=kind)
+        if decorated_note.should_rephrase(card):
+            text = decorated_note.rephrase_text(text=text, kind=kind)
+
         return text
 
     def on_reviewer_did_show_answer(self, _: Card):
