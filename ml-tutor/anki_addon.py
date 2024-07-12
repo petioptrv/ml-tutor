@@ -65,11 +65,17 @@ class AnkiAddon:
                 notes_decorator_factory=self._notes_decorator_factory,
                 display_original_question=config["display-original-question"],
                 ml_provider=ml_provider,
+                ease_target=config["ease-target"],
+                min_interval_days=config["min-interval-days"],
+                min_reviews=config["min-reviews"],
             )
             self._add_tutor_hooks()
         if self._ml_tutor is not None:
             self._ml_tutor.set_ml_provider(ml_provider=ml_provider)
             self._ml_tutor.set_display_original_question(display_original_question=config["display-original-question"])
+            self._ml_tutor.set_ease_target(ease_target=config["ease-target"])
+            self._ml_tutor.set_min_interval_days(min_interval_days=config["min-interval-days"])
+            self._ml_tutor.set_min_reviews(min_reviews=config["min-reviews"])
         return text
 
     def _add_tutor_hooks(self):

@@ -1,5 +1,8 @@
 {
   "openai-key": "",
   "openai-generative-model": "gpt-3.5-turbo",
-  "display-original-question": true
+  "display-original-question": true,
+  "ease-target": 2.5,
+  "min-interval-days": 30,
+  "min-reviews": 5
 }

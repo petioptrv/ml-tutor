@@ -48,17 +48,32 @@ class MLTutor:
         self,
         notes_decorator_factory: NotesWrapperFactory,
         ml_provider: MLProvider,
+        ease_target: float,
+        min_interval_days: int,
+        min_reviews: int,
         display_original_question: bool = True,
     ):
         self._notes_decorator_factory = notes_decorator_factory
         self._ml_provider = ml_provider
         self._display_original_question = display_original_question
+        self._ease_target = ease_target
+        self._min_interval_days = min_interval_days
+        self._min_reviews = min_reviews
 
     def set_ml_provider(self, ml_provider: MLProvider):
         self._ml_provider = ml_provider
 
     def set_display_original_question(self, display_original_question: bool):
         self._display_original_question = display_original_question
+
+    def set_ease_target(self, ease_target: float):
+        self._ease_target = ease_target
+
+    def set_min_interval_days(self, min_interval_days: int):
+        self._min_interval_days = min_interval_days
+
+    def set_min_reviews(self, min_reviews: int):
+        self._min_reviews = min_reviews
 
     def on_collection_load(self, _: Collection):
         self._start_next_cards_in_queue()
@@ -75,13 +90,22 @@ class MLTutor:
             else:
                 decorated_note.rephrase_note(ml_provider=self._ml_provider)
 
-        if decorated_note.should_rephrase(card):
+        if self._is_card_well_learned(card=card) and decorated_note.should_rephrase(card=card):
             text = decorated_note.rephrase_text(text=text, kind=kind)
 
         return text
 
     def on_reviewer_did_show_answer(self, _: Card):
         self._start_next_cards_in_queue()
+
+    def _is_card_well_learned(self, card: Card):
+        ease = card.factor / 1000.0
+        interval = card.ivl
+        reviews = card.reps
+
+        return (ease >= self._ease_target and
+                interval >= self._min_interval_days and
+                reviews >= self._min_reviews)
 
     def _start_next_cards_in_queue(self):
         op = QueryOp(
