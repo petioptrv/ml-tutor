@@ -35,8 +35,13 @@ from typing import Optional
 from aqt import gui_hooks, mw
 from aqt.utils import showCritical, showInfo
 
+from .prompts import Prompts
 from .notes_wrappers import NotesWrapperFactory
-from .constants import TUTOR_NAME, ADD_ON_ID
+from .constants import TUTOR_NAME, ADD_ON_ID, DISPLAY_ORIGINAL_QUESTION_CONFIG_KEY, EASE_TARGET_CONFIG_KEY, \
+    MIN_INTERVAL_DAYS_CONFIG_KEY, MIN_REVIEWS_CONFIG_KEY, LLM_BASIC_NOTE_REPHRASING_FRONT_PROMPT_CONFIG_KEY, \
+    LLM_BASIC_NOTE_REPHRASING_FRONT_PROMPT, LLM_BASIC_AND_REVERSE_NOTE_REPHRASING_BACK_PROMPT_CONFIG_KEY, \
+    LLM_NORMAL_NOTE_REPHRASING_BACK_PROMPT, LLM_CLOZE_NOTE_REPHRASING_PROMPT_CONFIG_KEY, \
+    LLM_CLOZE_NOTE_REPHRASING_PROMPT
 from .ml_tutor import MLTutor
 from .ml.ml_provider import MLProvider
 from .ml.open_ai import OpenAI
@@ -54,9 +59,14 @@ class AnkiAddon:
         self._on_config_update(json.dumps(config), __name__)
 
     def _on_config_update(self, text: str, add_on_id: str) -> str:
-        if add_on_id in (ADD_ON_ID, TUTOR_NAME.lower()):
+        if add_on_id in (ADD_ON_ID, TUTOR_NAME.lower(), __name__):
             config = json.loads(text)
             ml_provider = self._initialize_ml_provider(config=config)
+            prompts = Prompts(
+                front=config[LLM_BASIC_NOTE_REPHRASING_FRONT_PROMPT_CONFIG_KEY] or LLM_BASIC_NOTE_REPHRASING_FRONT_PROMPT,
+                back=config[LLM_BASIC_AND_REVERSE_NOTE_REPHRASING_BACK_PROMPT_CONFIG_KEY] or LLM_NORMAL_NOTE_REPHRASING_BACK_PROMPT,
+                cloze=config[LLM_CLOZE_NOTE_REPHRASING_PROMPT_CONFIG_KEY] or LLM_CLOZE_NOTE_REPHRASING_PROMPT,
+            )
             if ml_provider is None:
                 if self._ml_tutor is not None:
                     self._remove_tutor_hooks()
@@ -64,21 +74,23 @@ class AnkiAddon:
             elif self._ml_tutor is None:
                 self._ml_tutor = MLTutor(
                     notes_decorator_factory=self._notes_decorator_factory,
-                    display_original_question=config["display-original-question"],
+                    prompts=prompts,
+                    display_original_question=config[DISPLAY_ORIGINAL_QUESTION_CONFIG_KEY],
                     ml_provider=ml_provider,
-                    ease_target=config["ease-target"],
-                    min_interval_days=config["min-interval-days"],
-                    min_reviews=config["min-reviews"],
+                    ease_target=config[EASE_TARGET_CONFIG_KEY],
+                    min_interval_days=config[MIN_INTERVAL_DAYS_CONFIG_KEY],
+                    min_reviews=config[MIN_REVIEWS_CONFIG_KEY],
                 )
                 self._add_tutor_hooks()
             if self._ml_tutor is not None:
                 self._ml_tutor.set_ml_provider(ml_provider=ml_provider)
+                self._ml_tutor.set_prompts(prompts=prompts)
                 self._ml_tutor.set_display_original_question(
-                    display_original_question=config["display-original-question"]
+                    display_original_question=config[DISPLAY_ORIGINAL_QUESTION_CONFIG_KEY]
                 )
-                self._ml_tutor.set_ease_target(ease_target=config["ease-target"])
-                self._ml_tutor.set_min_interval_days(min_interval_days=config["min-interval-days"])
-                self._ml_tutor.set_min_reviews(min_reviews=config["min-reviews"])
+                self._ml_tutor.set_ease_target(ease_target=config[EASE_TARGET_CONFIG_KEY])
+                self._ml_tutor.set_min_interval_days(min_interval_days=config[MIN_INTERVAL_DAYS_CONFIG_KEY])
+                self._ml_tutor.set_min_reviews(min_reviews=config[MIN_REVIEWS_CONFIG_KEY])
         return text
 
     def _add_tutor_hooks(self):

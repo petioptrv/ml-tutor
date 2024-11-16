@@ -32,7 +32,12 @@
 TUTOR_NAME = "ML-Tutor"
 REPHRASE_CARDS_AHEAD = 3
 NOTE_TEXT_PARSER = "html.parser"
-LLM_NORMAL_NOTE_REPHRASING_FRONT_PROMPT = """
+DISPLAY_ORIGINAL_QUESTION_CONFIG_KEY = "display-original-question"
+EASE_TARGET_CONFIG_KEY = "ease-target"
+MIN_INTERVAL_DAYS_CONFIG_KEY = "min-interval-days"
+MIN_REVIEWS_CONFIG_KEY = "min-reviews"
+LLM_BASIC_NOTE_REPHRASING_FRONT_PROMPT_CONFIG_KEY = "basic-note-front-prompt"
+LLM_BASIC_NOTE_REPHRASING_FRONT_PROMPT = """
 Given the spaced-repetition note front text: '{note_front}', please attempt to rephrase
 the note front in a way that retains the core information and intent but alters the
 structure and wording. This rephrasing should encourage understanding and recall of the
@@ -40,6 +45,7 @@ concept rather than memorization of the exact structure of the question. If the 
 too ambiguous to rephrase without altering its intended meaning, return an empty string
 without any further explanation why the text is ambiguous.
 """
+LLM_BASIC_AND_REVERSE_NOTE_REPHRASING_BACK_PROMPT_CONFIG_KEY = "basic-and-reverse-note-back-prompt"
 LLM_NORMAL_NOTE_REPHRASING_BACK_PROMPT = """
 Given the spaced-repetition note back text: '{note_back}', please attempt to rephrase
 the note back in a way that retains the core information and intent but alters the
@@ -48,6 +54,7 @@ concept rather than memorization of the exact structure of the question. If the 
 too ambiguous to rephrase without altering its intended meaning, return an empty string
 without any further explanation why the text is ambiguous.
 """
+LLM_CLOZE_NOTE_REPHRASING_PROMPT_CONFIG_KEY = "cloze-note-prompt"
 LLM_CLOZE_NOTE_REPHRASING_PROMPT = """
 Given the spaced-repetition cloze-deletion note '{note_cloze}', please reword it in a
 way that retains the core information and intent but alters the structure and wording.

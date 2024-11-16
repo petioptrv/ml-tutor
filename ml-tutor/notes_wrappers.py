@@ -43,13 +43,11 @@ from anki.notes_pb2 import Note
 from aqt import mw
 from bs4 import BeautifulSoup, Tag, MarkupResemblesLocatorWarning
 
+from .prompts import Prompts
 from .utils import Singleton, remove_tags, build_html_paragraph_from_text
 from .constants import (
-    LLM_NORMAL_NOTE_REPHRASING_FRONT_PROMPT,
     TUTOR_NAME,
     NOTE_TEXT_PARSER,
-    LLM_NORMAL_NOTE_REPHRASING_BACK_PROMPT,
-    LLM_CLOZE_NOTE_REPHRASING_PROMPT,
 )
 from .ml.ml_provider import MLProvider
 
@@ -61,10 +59,14 @@ class NotesWrapperFactory(metaclass=Singleton):
 
     @classmethod
     def get_wrapped_note(
-        cls, note: Note, display_original_question: Optional[bool] = None
+        cls,
+        note: Note,
+        prompts: Prompts,
+        display_original_question: Optional[bool] = None,
     ) -> "NoteWrapperBase":
         if note.id in NotesWrapperFactory._note_wrappers:
             wrapped_note = NotesWrapperFactory._note_wrappers[note.id]
+            wrapped_note.set_prompts(prompts=prompts)
             if display_original_question is not None:
                 wrapped_note.set_display_original_question(display_original_question=display_original_question)
         else:
@@ -76,7 +78,7 @@ class NotesWrapperFactory(metaclass=Singleton):
                 decorator_cls = PassThroughNoteWrapper
 
             display_original_question = display_original_question is None or display_original_question
-            wrapped_note = decorator_cls(note, display_original_question)
+            wrapped_note = decorator_cls(note=note, prompts=prompts, display_original_question=display_original_question)
 
             NotesWrapperFactory._note_wrappers[note.id] = wrapped_note
 
@@ -121,8 +123,9 @@ class NoteWrapperBase(ABC, metaclass=DecoratorRegistryMeta):
     def _do_rephrase_note(self, ml_provider: MLProvider):
         ...
 
-    def __init__(self, note: Note, display_original_question: bool):
+    def __init__(self, note: Note, prompts: Prompts, display_original_question: bool):
         self._note_id = note.id
+        self._prompts = prompts
         self._display_original_question = display_original_question
         self._is_rephrasing: Optional[Event] = None
 
@@ -136,6 +139,9 @@ class NoteWrapperBase(ABC, metaclass=DecoratorRegistryMeta):
 
     def get_note(self) -> Note:
         return mw.col.get_note(id=self._note_id)
+
+    def set_prompts(self, prompts: Prompts):
+        self._prompts = prompts
 
     def set_display_original_question(self, display_original_question: bool):
         self._display_original_question = display_original_question
@@ -319,7 +325,7 @@ class BasicNoteWrapper(BasicNoteWrapperBase):
     def _generate_rephrased_front(self, ml_provider: MLProvider) -> str:
         front = self._extract_front()
         back = self._extract_back()
-        prompt = LLM_NORMAL_NOTE_REPHRASING_FRONT_PROMPT.format(note_front=front, note_back=back)
+        prompt = self._prompts.front.format(note_front=front, note_back=back)
         rephrased_front = ml_provider.completion(prompt=prompt)
         rephrased_front = rephrased_front.strip('"').strip("'")
         if len(rephrased_front) == 0:
@@ -437,7 +443,7 @@ class BasicAndReverseNoteWrapper(BasicNoteWrapper):
     def _generate_rephrased_back(self, ml_provider: MLProvider) -> str:
         front = self._extract_front()
         back = self._extract_back()
-        prompt = LLM_NORMAL_NOTE_REPHRASING_BACK_PROMPT.format(note_front=front, note_back=back)
+        prompt = self._prompts.back.format(note_front=front, note_back=back)
         rephrased_back = ml_provider.completion(prompt=prompt)
         rephrased_back = rephrased_back.strip('"').strip("'")
         if len(rephrased_back) == 0:
@@ -491,7 +497,7 @@ class ClozeNoteWrapper(NoteWrapperBase):
 
     def _generate_rephrased_cloze(self, ml_provider: MLProvider) -> str:
         cloze = self._extract_cloze()
-        prompt = LLM_CLOZE_NOTE_REPHRASING_PROMPT.format(note_cloze=cloze)
+        prompt = self._prompts.cloze.format(note_cloze=cloze)
         rephrased_cloze = ml_provider.completion(prompt=prompt)
         rephrased_cloze = rephrased_cloze.strip('"').strip("'")
         if len(rephrased_cloze) == 0:

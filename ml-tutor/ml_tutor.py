@@ -36,6 +36,7 @@ from anki.scheduler.v3 import QueuedCards
 from aqt import mw
 from aqt.operations import QueryOp
 
+from .prompts import Prompts
 from .constants import REPHRASE_CARDS_AHEAD
 from .notes_wrappers import NotesWrapperFactory
 from .ml.ml_provider import MLProvider
@@ -51,10 +52,12 @@ class MLTutor:
         ease_target: float,
         min_interval_days: int,
         min_reviews: int,
+        prompts: Prompts,
         display_original_question: bool = True,
     ):
         self._notes_decorator_factory = notes_decorator_factory
         self._ml_provider = ml_provider
+        self._prompts = prompts
         self._display_original_question = display_original_question
         self._ease_target = ease_target
         self._min_interval_days = min_interval_days
@@ -62,6 +65,9 @@ class MLTutor:
 
     def set_ml_provider(self, ml_provider: MLProvider):
         self._ml_provider = ml_provider
+
+    def set_prompts(self, prompts: Prompts):
+        self._prompts = prompts
 
     def set_display_original_question(self, display_original_question: bool):
         self._display_original_question = display_original_question
@@ -82,7 +88,9 @@ class MLTutor:
         self._start_next_cards_in_queue()
         note = self._get_note_from_card(card=card)
         decorated_note = self._notes_decorator_factory.get_wrapped_note(
-            note=note, display_original_question=self._display_original_question
+            note=note,
+            prompts=self._prompts,
+            display_original_question=self._display_original_question,
         )
         if not decorated_note.rephrased:
             if decorated_note.is_rephrasing:
@@ -122,7 +130,9 @@ class MLTutor:
         for card in next_cards_queue.cards:
             note = self._get_note_from_card(card=card.card)
             decorated_note = self._notes_decorator_factory.get_wrapped_note(
-                note=note, display_original_question=self._display_original_question
+                note=note,
+                prompts=self._prompts,
+                display_original_question=self._display_original_question,
             )
             decorated_note.rephrase_note(ml_provider=self._ml_provider)
 

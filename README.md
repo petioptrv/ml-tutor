@@ -43,15 +43,88 @@ original question in any way. In other words, the rephrased question is in plain
 Add-on configurations can be found under Tools -> Add-ons -> select "ML-Tutor" -> Config. The configuration changes do
 not require a restart of the Anki app.
 
-| Configuration               | Description                                                                                                                                                                                                                                                        |
-|-----------------------------|--------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------|
-| `openai-key`                | Your [OpenAI API key](https://platform.openai.com/docs/quickstart/account-setup)                                                                                                                                                                                   |
-| `openai-generative-model`   | [OpenAI model](https://platform.openai.com/docs/models) to use (e.g. `gpt-4o`).                                                                                                                                                                                    |
-| `display-original-question` | If the original question should be displayed along with the card answer                                                                                                                                                                                            |
-| `ease-target`               | The minimal [ease factor](https://docs.ankiweb.net/deck-options.html?highlight=ease#starting-ease) a card must reach to start being rephrased. Note that this option is irrelevant if using [FSRS](https://docs.ankiweb.net/deck-options.html?highlight=fsr#fsrs). |
-| `min-interval-days`         | The minimal [days interval](https://docs.ankiweb.net/deck-options.html?highlight=fsr#graduating-interval) a card must reach to start being rephrased.                                                                                                              |
-| `min-reviews`               | The minimum number of times a card must be reviewed in its original form before it starts being rephrased.                                                                                                                                                         |
+| Configuration                        | Description                                                                                                                                                                                                                                                        |
+|--------------------------------------|--------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------|
+| `openai-key`                         | Your [OpenAI API key](https://platform.openai.com/docs/quickstart/account-setup)                                                                                                                                                                                   |
+| `openai-generative-model`            | [OpenAI model](https://platform.openai.com/docs/models) to use (e.g. `gpt-4o`).                                                                                                                                                                                    |
+| `display-original-question`          | If the original question should be displayed along with the card answer                                                                                                                                                                                            |
+| `ease-target`                        | The minimal [ease factor](https://docs.ankiweb.net/deck-options.html?highlight=ease#starting-ease) a card must reach to start being rephrased. Note that this option is irrelevant if using [FSRS](https://docs.ankiweb.net/deck-options.html?highlight=fsr#fsrs). |
+| `min-interval-days`                  | The minimal [days interval](https://docs.ankiweb.net/deck-options.html?highlight=fsr#graduating-interval) a card must reach to start being rephrased.                                                                                                              |
+| `min-reviews`                        | The minimum number of times a card must be reviewed in its original form before it starts being rephrased.                                                                                                                                                         |
+| `basic-note-front-prompt`            | The prompt to use when rephrasing the Front field for both Basic and Basic-and-Reverse notes. See the next section on note prompts for additional details.                                                                                                         |
+| `basic-and-reverse-note-back-prompt` | The prompt to use when rephrasing the Back field for Basic-and-Reverse notes. See the next section on note prompts for additional details.                                                                                                                         |
+| `cloze-note-prompt`                  | The prompt to use when rephrasing Cloze notes. See the next section on note prompts for additional details.                                                                                                                                                        |
 
+#### Prompts
+
+You can customize the prompts used for different cards. If you come up with significantly better prompts than the
+original ones, please consider sending them [my way](#contact) so I can try them out and maybe update the defaults.
+
+For all prompts, if the LLM returns an empty string, the add-on assumes that to mean the rephrasing failed, so you can
+instruct the LLM to output an empty string if the question is too vague for it to rephrase.
+
+##### Prompt Keywords
+
+In order to make the prompts card-specific, the add-on will replace certain keywords in the prompt with information from
+the Anki cards. For instance, if the keywords `{note_front}` and `{note_back}` are found in the `basic-note-front-prompt`
+prompt, they will be replaced  with the Front and Back fields of the note, respectively. For example, for an Anki Basic
+card with Front "Some front" and Back "Some back", the prompt `Rephrase the Front field of the Basic Anki card with
+Front '{note_front}' and Back '{note_back}'. Output an empty string if the note is too ambiguous.` will be sent to the
+LLM as `Rephrase the Front field of the Basic Anki card with Front 'Some front' and Back 'Some back'. Output an empty
+string if the note is too ambiguous.`
+
+##### Prompt For Rephrasing Note Front Field
+
+The `basic-note-front-prompt` configuration is used when prompting for a rephrasing when the Front field is about to be
+shown, and the Back field is being tested for both Basic and Basic (front-and-back) notes. If the keywords
+`{note_front}` and `{note_back}` are found in the prompt, they will be replaced with the Front and Back fields of the
+note, respectively.
+
+**Default prompt**
+
+```
+Given the spaced-repetition note front text: '{note_front}', please attempt to rephrase
+the note front in a way that retains the core information and intent but alters the
+structure and wording. This rephrasing should encourage understanding and recall of the
+concept rather than memorization of the exact structure of the question. If the text is
+too ambiguous to rephrase without altering its intended meaning, return an empty string
+without any further explanation why the text is ambiguous.
+```
+
+##### Prompt For Rephrasing Note Back Field
+
+The `basic-and-reverse-note-back-prompt` configuration is used when prompting for a rephrasing when the Back field is
+about to be shown, and the Front field is being tested for Basic (front-and-back) notes. If the keywords `{note_front}`
+and `{note_back}` are found in the prompt, they will be replaced with the Front and Back fields of the note,
+respectively.
+
+**Default prompt**
+
+```
+Given the spaced-repetition note back text: '{note_back}', please attempt to rephrase
+the note back in a way that retains the core information and intent but alters the
+structure and wording. This rephrasing should encourage understanding and recall of the
+concept rather than memorization of the exact structure of the question. If the text is
+too ambiguous to rephrase without altering its intended meaning, return an empty string
+without any further explanation why the text is ambiguous.
+```
+
+##### Prompt For Rephrasing Cloze Notes
+
+The `cloze-note-prompt` configuration is used when prompting for a rephrasing of a Cloze note. If the keyword
+`{note_cloze}` is found in the prompt, it will be replaced with the Cloze note text (e.g. `This is {{c1::some}} cloze
+{{c2::deletion}}` will be fed as-is to the prompt).
+
+**Default prompt**
+
+```
+Given the spaced-repetition cloze-deletion note '{note_cloze}', please reword it in a
+way that retains the core information and intent but alters the structure and wording.
+The goal is to enhance understanding and recall without relying on the exact structure
+of the question. Keep the same number of fill-in-the-blank spaces. If the text is too
+ambiguous to rephrase without altering its intended meaning, return an empty string
+without any further explanation why the text is ambiguous.
+```
 
 #### A Note On GPT Models
 

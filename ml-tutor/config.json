@@ -4,5 +4,8 @@
   "display-original-question": true,
   "ease-target": 2.5,
   "min-interval-days": 15,
-  "min-reviews": 2
+  "min-reviews": 2,
+  "basic-note-front-prompt": "Given the spaced-repetition note front text: '{note_front}', please attempt to rephrase the note front in a way that retains the core information and intent but alters the structure and wording. This rephrasing should encourage understanding and recall of the concept rather than memorization of the exact structure of the question. If the text is too ambiguous to rephrase without altering its intended meaning, return an empty string without any further explanation why the text is ambiguous.",
+  "basic-and-reverse-note-back-prompt": "Given the spaced-repetition note back text: '{note_back}', please attempt to rephrase the note back in a way that retains the core information and intent but alters the structure and wording. This rephrasing should encourage understanding and recall of the concept rather than memorization of the exact structure of the question. If the text is too ambiguous to rephrase without altering its intended meaning, return an empty string without any further explanation why the text is ambiguous.",
+  "cloze-note-prompt": "Given the spaced-repetition cloze-deletion note '{note_cloze}', please reword it in a way that retains the core information and intent but alters the structure and wording. The goal is to enhance understanding and recall without relying on the exact structure of the question. Keep the same number of fill-in-the-blank spaces. If the text is too ambiguous to rephrase without altering its intended meaning, return an empty string without any further explanation why the text is ambiguous."
 }
