@@ -129,7 +129,7 @@ class AnkiAddon:
                 valid_models = openai.get_valid_models()
                 showCritical(
                     f"[{TUTOR_NAME}] OpenAI model is invalid."
-                    f"<br><br><b>Valid Models</b><br>{'<br>'.join([m.id for m in valid_models])}",
+                    f"<br><br><b>Valid Models</b><br>{'<br>'.join([m for m in valid_models])}",
                     help=None,
                 )
                 openai = None
