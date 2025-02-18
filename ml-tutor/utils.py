@@ -34,7 +34,7 @@ import warnings
 
 from bs4 import BeautifulSoup, Tag, MarkupResemblesLocatorWarning
 
-from .constants import NOTE_TEXT_PARSER
+from constants import NOTE_TEXT_PARSER
 
 warnings.filterwarnings("ignore", category=MarkupResemblesLocatorWarning)
 

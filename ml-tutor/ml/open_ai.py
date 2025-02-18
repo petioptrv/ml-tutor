@@ -34,7 +34,7 @@ from typing import Dict
 
 import requests
 
-from .ml_provider import MLProvider
+from ml.ml_provider import MLProvider
 
 
 class OpenAI(MLProvider):

@@ -29,4 +29,4 @@
 #
 # Any modifications to this file must keep this entire header intact.
 
-from .main import *
+from main import *

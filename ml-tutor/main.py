@@ -29,6 +29,6 @@
 #
 # Any modifications to this file must keep this entire header intact.
 
-from .anki_addon import AnkiAddon
+from anki_addon import AnkiAddon
 
 addon = AnkiAddon()

@@ -43,13 +43,13 @@ from anki.notes_pb2 import Note
 from aqt import mw
 from bs4 import BeautifulSoup, Tag, MarkupResemblesLocatorWarning
 
-from .prompts import Prompts
-from .utils import Singleton, remove_tags, build_html_paragraph_from_text
-from .constants import (
+from prompts import Prompts
+from utils import Singleton, remove_tags, build_html_paragraph_from_text
+from constants import (
     TUTOR_NAME,
     NOTE_TEXT_PARSER,
 )
-from .ml.ml_provider import MLProvider
+from ml.ml_provider import MLProvider
 
 warnings.filterwarnings("ignore", category=MarkupResemblesLocatorWarning)
 

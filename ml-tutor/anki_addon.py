@@ -35,16 +35,16 @@ from typing import Optional
 from aqt import gui_hooks, mw
 from aqt.utils import showCritical, showInfo
 
-from .prompts import Prompts
-from .notes_wrappers import NotesWrapperFactory
-from .constants import TUTOR_NAME, ADD_ON_ID, DISPLAY_ORIGINAL_QUESTION_CONFIG_KEY, EASE_TARGET_CONFIG_KEY, \
+from prompts import Prompts
+from notes_wrappers import NotesWrapperFactory
+from constants import TUTOR_NAME, ADD_ON_ID, DISPLAY_ORIGINAL_QUESTION_CONFIG_KEY, EASE_TARGET_CONFIG_KEY, \
     MIN_INTERVAL_DAYS_CONFIG_KEY, MIN_REVIEWS_CONFIG_KEY, LLM_BASIC_NOTE_REPHRASING_FRONT_PROMPT_CONFIG_KEY, \
     LLM_BASIC_NOTE_REPHRASING_FRONT_PROMPT, LLM_BASIC_AND_REVERSE_NOTE_REPHRASING_BACK_PROMPT_CONFIG_KEY, \
     LLM_NORMAL_NOTE_REPHRASING_BACK_PROMPT, LLM_CLOZE_NOTE_REPHRASING_PROMPT_CONFIG_KEY, \
     LLM_CLOZE_NOTE_REPHRASING_PROMPT
-from .ml_tutor import MLTutor
-from .ml.ml_provider import MLProvider
-from .ml.open_ai import OpenAI
+from ml_tutor import MLTutor
+from ml.ml_provider import MLProvider
+from ml.open_ai import OpenAI
 
 
 class AnkiAddon:
@@ -53,7 +53,7 @@ class AnkiAddon:
 
     def __init__(self):
         self._notes_decorator_factory = NotesWrapperFactory()
-        config = mw.addonManager.getConfig(__name__)
+        config = mw.addonManager.getConfig(TUTOR_NAME)
         self._ml_tutor: Optional[MLTutor] = None
         gui_hooks.addon_config_editor_will_update_json.append(self._on_config_update)
         self._on_config_update(json.dumps(config), __name__)

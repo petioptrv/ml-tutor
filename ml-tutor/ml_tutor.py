@@ -36,10 +36,10 @@ from anki.scheduler.v3 import QueuedCards
 from aqt import mw
 from aqt.operations import QueryOp
 
-from .prompts import Prompts
-from .constants import REPHRASE_CARDS_AHEAD
-from .notes_wrappers import NotesWrapperFactory
-from .ml.ml_provider import MLProvider
+from prompts import Prompts
+from constants import REPHRASE_CARDS_AHEAD
+from notes_wrappers import NotesWrapperFactory
+from ml.ml_provider import MLProvider
 
 
 class MLTutor:
