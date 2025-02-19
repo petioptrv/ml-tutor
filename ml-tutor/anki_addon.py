@@ -53,7 +53,11 @@ class AnkiAddon:
 
     def __init__(self):
         self._notes_decorator_factory = NotesWrapperFactory()
-        config = mw.addonManager.getConfig(TUTOR_NAME)
+        config = (
+            mw.addonManager.getConfig(__name__)
+            or mw.addonManager.getConfig(TUTOR_NAME.lower())
+            or mw.addonManager.getConfig(ADD_ON_ID)
+        )
         self._ml_tutor: Optional[MLTutor] = None
         gui_hooks.addon_config_editor_will_update_json.append(self._on_config_update)
         self._on_config_update(json.dumps(config), __name__)

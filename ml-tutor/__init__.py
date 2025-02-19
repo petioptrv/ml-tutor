@@ -28,5 +28,9 @@
 # listed here: <mailto:petioptrv@icloud.com>.
 #
 # Any modifications to this file must keep this entire header intact.
+import sys
+import os
+
+sys.path.append(os.path.join(os.path.dirname(__file__), "."))
 
 from main import *

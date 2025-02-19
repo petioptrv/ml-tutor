@@ -33,7 +33,9 @@ import logging
 from typing import Dict
 
 import requests
+from aqt.utils import showCritical, showInfo
 
+from constants import TUTOR_NAME
 from ml.ml_provider import MLProvider
 
 
@@ -98,7 +100,10 @@ class OpenAI(MLProvider):
             "model": self._generative_model,
             "messages": [message],
         }
-        response = requests.post(url=url, headers=headers, json=data).json()
+        raw_response = requests.post(url=url, headers=headers, json=data)
+        response = raw_response.json()
+        if response is None or "choices" not in response:
+            showCritical(f"[{TUTOR_NAME}] Faulty response from OpenAI {raw_response}", help=None)
         message = response["choices"][0]["message"]["content"]
         return message
 
